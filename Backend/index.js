@@ -16,6 +16,8 @@ app.use("/api/auth", authRoutes);
 
 app.use("/api/sos", sosRoutes);
 app.use("/api/trips", tripRoutes);
+app.use("/api/routes", routeRoutes);
+
 
 connectDB();
 
