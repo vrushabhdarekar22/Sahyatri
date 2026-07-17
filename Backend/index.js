@@ -6,7 +6,7 @@ import authRoutes from "./routes/authRoutes.js";
 import sosRoutes from "./routes/sosRoutes.js";
 import alertRoutes from "./routes/alertRoutes.js";
 import routeRoutes from "./routes/routeRoutes.js";
-
+import recordingRoutes from "./routes/recordingRoutes.js";
 
 const PORT = process.env.PORT;
 
@@ -22,7 +22,7 @@ app.use("/api/sos", sosRoutes);
 app.use("/api/trips", tripRoutes);
 app.use("/api/alerts", alertRoutes);
 app.use("/api/routes", routeRoutes);
-
+app.use("/api/recordings",recordingRoutes);
 
 connectDB();
 
