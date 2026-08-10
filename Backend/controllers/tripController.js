@@ -144,16 +144,40 @@ export const startTrip = async (req, res) => {
 
 export const completeTrip = async (req, res) => {
   try {
+    const { id } = req.params;
+    if (!id || id === "undefined" || id === "null") {
+      return res.status(400).json({ message: "Invalid trip ID provided" });
+    }
+
     const trip = await Trip.findByIdAndUpdate(
-      req.params.id,
+      id,
       { status: "completed", completedAt: new Date() },
       { new: true }
     );
 
     if (!trip) return res.status(404).json({ message: "Trip not found" });
 
-    res.json(trip);
+    res.status(200).json({
+      success: true,
+      message: "Trip completed successfully",
+      trip,
+    });
   } catch (err) {
+    console.error("completeTrip error:", err.message);
     res.status(500).json({ message: "Failed to complete trip" });
+  }
+};
+
+export const getActiveTrip = async (req, res) => {
+  try {
+    const activeTrip = await Trip.findOne({
+      userId: req.user.id,
+      status: "active",
+    });
+
+    res.status(200).json(activeTrip || null);
+  } catch (err) {
+    console.error("getActiveTrip error:", err.message);
+    res.status(500).json({ message: "Failed to fetch active trip" });
   }
 };

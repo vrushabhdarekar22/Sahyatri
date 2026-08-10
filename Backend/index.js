@@ -8,6 +8,7 @@ import sosRoutes from "./routes/sosRoutes.js";
 import alertRoutes from "./routes/alertRoutes.js";
 import routeRoutes from "./routes/routeRoutes.js";
 import recordingRoutes from "./routes/recordingRoutes.js";
+import guardianRoutes from "./routes/guardianRoutes.js";
 
 const PORT = process.env.PORT;
 
@@ -19,6 +20,7 @@ app.use(express.json());
 
 app.use("/api/auth", authRoutes);
 
+app.use("/api/guardian", guardianRoutes);
 app.use("/api/sos", sosRoutes);
 app.use("/api/trips", tripRoutes);
 app.use("/api/alerts", alertRoutes);

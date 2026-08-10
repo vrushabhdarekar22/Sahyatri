@@ -11,6 +11,7 @@ export const register = async (req, res) => {
       email,
       password,
       distressPin,
+      phone,
       emergencyContacts
     } = req.body;
 
@@ -52,6 +53,8 @@ export const register = async (req, res) => {
         name,
 
         email,
+
+        phone: phone || (emergencyContacts && emergencyContacts[0]) || null,
 
         password:
           hashedPassword,

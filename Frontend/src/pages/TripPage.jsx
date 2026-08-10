@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { useNavigate } from "react-router-dom"; //to navigate between the pages
-import { motion } from "framer-motion"; // for animations
+import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
 import useAuth from "../hooks/useAuth";
 import Navbar from "../components/Navbar";
 import LiveMap from "../components/LiveMap";
-import SafetyCheckModal from "../components/SafetyCheckModal"; // Popup shown during periodic safety checks.
-// import socket from "../socket/socket";
-import { queueOfflineAlert } from "../utils/offlineQueue";
+import SafetyCheckModal from "../components/SafetyCheckModal";
+import SOSButton from "../components/SOSButton";
+import { useActiveTrip } from "../context/ActiveTripContext";
 
 const GEOAPIFY_KEY = import.meta.env.VITE_GEOAPIFY_API_KEY;
 
@@ -15,57 +15,63 @@ export default function TripPage() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
-  /* ───────── Trip / navigation state ───────── */
-  const [tripState, setTripState] = useState("planning"); //trip state (Active,completed,planning)
-  const [loading, setLoading] = useState(false); // used to show spinner,loading animation etc
-  const [routes, setRoutes] = useState([]); // stores all routes 
-  const [bestRoute, setBestRoute] = useState(null); 
-  const [selectedRouteIdx, setSelectedRouteIdx] = useState(0); // which stores which route user has selected
-  const [activeTripId, setActiveTripId] = useState(null); //trip id(Mongo doc)
+  const {
+    tripState,
+    loading,
+    setLoading,
+    routes,
+    setRoutes,
+    bestRoute,
+    setBestRoute,
+    selectedRouteIdx,
+    setSelectedRouteIdx,
+    activeTripId,
+    startQuery,
+    setStartQuery,
+    startCoords,
+    setStartCoords,
+    destQuery,
+    setDestQuery,
+    destCoords,
+    setDestCoords,
+    travelMode,
+    setTravelMode,
+    shareLocation,
+    setShareLocation,
+    routeDeviation,
+    setRouteDeviation,
+    deviationThreshold,
+    setDeviationThreshold,
+    periodicCheck,
+    setPeriodicCheck,
+    checkInterval,
+    setCheckInterval,
+    recordAudio,
+    setRecordAudio,
+    showSettings,
+    setShowSettings,
+    userLocation,
+    distanceRemaining,
+    timeRemaining,
+    isDeviated,
+    deviationMeters,
+    showCheckInModal,
+    setShowCheckInModal,
+    secondsRemaining,
+    nearDestination,
+    setNearDestination,
+    startTrip,
+    completeTrip,
+    abortTrip,
+    handleConfirmSafe,
+  } = useActiveTrip();
 
-  /* ───────── Address search ───────── */
-  const [startQuery, setStartQuery] = useState("");
+  /* ───────── UI Suggestion States ───────── */
   const [startSuggestions, setStartSuggestions] = useState([]);
-  const [startCoords, setStartCoords] = useState({ lat: 18.5204, lng: 73.8567 });
-
-  const [destQuery, setDestQuery] = useState("");
   const [destSuggestions, setDestSuggestions] = useState([]);
-  const [destCoords, setDestCoords] = useState({ lat: null, lng: null });
 
-  const [travelMode, setTravelMode] = useState("driving-car"); // we sent it to routing API
-
-  /* ───────── Safety settings ───────── */
-  const [shareLocation, setShareLocation] = useState(true);
-  const [routeDeviation, setRouteDeviation] = useState(true);
-  const [deviationThreshold, setDeviationThreshold] = useState(200); // triggers alert when route crosses this deviation
-  const [periodicCheck, setPeriodicCheck] = useState(true);
-  const [checkInterval, setCheckInterval] = useState(15);
-  const [recordAudio, setRecordAudio] = useState(true);
-  const [showSettings, setShowSettings] = useState(false);// whether to show safety settings modal or not
-
-  /* ───────── Active monitoring ───────── */
-  const [userLocation, setUserLocation] = useState(null);
-  const [distanceRemaining, setDistanceRemaining] = useState(0);
-  const [timeRemaining, setTimeRemaining] = useState(0);
-  const [isDeviated, setIsDeviated] = useState(false);
-  const [deviationMeters, setDeviationMeters] = useState(0);
-  const [showCheckInModal, setShowCheckInModal] = useState(false); // that safety pop up comes every x minutes
-  const [secondsRemaining, setSecondsRemaining] = useState(0);
-  const [nearDestination, setNearDestination] = useState(false);
-
-  /* ───────── SOS ───────── */
-  const [sosActive, setSosActive] = useState(false);
-  const [sosAlertId, setSosAlertId] = useState(null); // alert ID returned by backend (later we can attach audio to it)
-
-  /* ───────── Refs ───────── */ // This are values that change but do not trigger a re-render.
-  // if we want change in value shoudn`t trigger re-render then we use => useRef
-  // navigator.geolocation.watchPosition(...) -> It continously ask where are you?
-  const gpsWatchRef = useRef(null); // we store watch ID-> bcoz we need to stop this function when we reach destination
-  const checkInTimerRef = useRef(null);
-  const mediaRecorderRef = useRef(null);
-  const chunksRef = useRef([]); // audio chunks    
-
-//   Debouncing means:Wait for the user to stop typing before making the API call. 
+  /* ───────── Refs ───────── */
+  const sosRef = useRef(null);
   const startDebounceRef = useRef(null);
   const destDebounceRef = useRef(null);
 
@@ -75,12 +81,6 @@ export default function TripPage() {
 
   /* ───────────────────────────────────────────────────
      GEOAPIFY AUTOCOMPLETE
-     Replaces Nominatim — gives better results and uses
-     the same API key already in use for safety scoring.
-
-     What we extract from the response:
-       properties.formatted  → display label
-       properties.lat / lon  → coordinates sent to backend
    ─────────────────────────────────────────────────── */
   const fetchGeoapifySuggestions = async (query, type) => {
     if (!query || query.length < 3) {
@@ -94,10 +94,9 @@ export default function TripPage() {
         {
           params: {
             text: query,
-            limit: 5, //return at most 5 places
+            limit: 5,
             apiKey: GEOAPIFY_KEY,
-            // bias toward India for better local results
-            bias: "countrycode:in", // prefer places in india
+            bias: "countrycode:in",
           },
         }
       );
@@ -116,7 +115,6 @@ export default function TripPage() {
     }
   };
 
-  // Debounce autocomplete to avoid hammering the API on every keystroke
   const handleStartInput = (value) => {
     setStartQuery(value);
     clearTimeout(startDebounceRef.current);
@@ -135,20 +133,12 @@ export default function TripPage() {
     );
   };
 
-
-// navigator.geolocation is a JavaScript Web API provided by the browser that allows a website
-// to access the user's geographical location (latitude and longitude), 
-// only after the user grants permission.
-
-
-  /* When User clicks on📍-symbol then this function is called to get current location*/
   const useCurrentLocation = () => {
     if (!navigator.geolocation) {
       alert("Geolocation is not supported by your browser");
       return;
     }
     setLoading(true);
-    // this gets location only once
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
@@ -168,15 +158,8 @@ export default function TripPage() {
 
   /* ───────────────────────────────────────────────────
      FETCH SAFE ROUTES
-     Sends { start: {lat,lng}, end: {lat,lng}, mode }
-     Backend returns up to 2 ORS alternative routes,
-     each scored by Geoapify safety data.
-     Response: { success, safest, allRoutes: Route[] }
-     Each Route: { id, geometry, summary, distance,
-                   duration, score, breakdown }
    ─────────────────────────────────────────────────── */
-  // we make request to backend to get routes
-   const fetchSafeRoutes = async () => {
+  const fetchSafeRoutes = async () => {
     if (
       !startCoords.lat ||
       !startCoords.lng ||
@@ -200,7 +183,7 @@ export default function TripPage() {
 
       setRoutes(all);
       setBestRoute(best);
-      setSelectedRouteIdx(0); // safest is always index 0 (sorted server-side)
+      setSelectedRouteIdx(0);
 
       if (all.length === 0) alert("No routes found between selected coordinates.");
     } catch (err) {
@@ -211,308 +194,15 @@ export default function TripPage() {
     }
   };
 
-  // Selecting a route immediately updates bestRoute →
-  // LiveMap re-renders the bold red line to that route's geometry
   const handleSelectRoute = (idx) => {
     setSelectedRouteIdx(idx);
     setBestRoute(routes[idx]);
   };
 
-  /* ───────── Haversine distance ───────── */
-  const getDistance = (lat1, lon1, lat2, lon2) => {
-    const R = 6371e3; //(Earth radius-6371km)
-    const phi1 = (lat1 * Math.PI) / 180; // here we convert it into radians(Bcoz js assumes calues in radians not in degee)
-    const phi2 = (lat2 * Math.PI) / 180;
-    const dPhi = ((lat2 - lat1) * Math.PI) / 180;
-    const dLam = ((lon2 - lon1) * Math.PI) / 180;
-    const a =
-      Math.sin(dPhi / 2) ** 2 +
-      Math.cos(phi1) * Math.cos(phi2) * Math.sin(dLam / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  };
-
-  /* ───────── Start trip ───────── */
-  const handleStartTrip = async () => {
-    if (!bestRoute) return;
-    try {
-      setLoading(true);
-      const token = localStorage.getItem("token");
-
-      const res = await axios.post(
-        "http://localhost:5000/api/trips",
-        {
-          start: { lat: startCoords.lat, lng: startCoords.lng, address: startQuery },
-          destination: { lat: destCoords.lat, lng: destCoords.lng, address: destQuery },
-          route: bestRoute,
-          safetyScore: bestRoute.score || 0,
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      const trip = res.data;
-      setActiveTripId(trip._id);
-
-      await axios.put(
-        `http://localhost:5000/api/trips/${trip._id}/start`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-    //   socket.emit("start-trip", {
-    //     tripId: trip._id,
-    //     userId: user?._id,
-    //     userName: user?.name,
-    //     destination: destQuery,
-    //     start: startCoords,
-    //     safetyScore: bestRoute.score || 0,
-    //     routeGeometry: bestRoute.geometry,
-    //   });
-
-      setTripState("active");
-      setIsDeviated(false);
-      setNearDestination(false);
-
-      const routePoints = bestRoute.geometry.coordinates;
-      const distance = bestRoute.summary?.distance || 0;
-      const duration = bestRoute.summary?.duration || 0;
-      setDistanceRemaining((distance / 1000).toFixed(1));
-      setTimeRemaining(Math.round(duration / 60));
-
-      startLiveTracking(trip._id, routePoints, distance, duration);
-      if (periodicCheck) startCheckInTimer();
-    } catch (err) {
-      console.error("Start Trip error:", err);
-      alert("Failed to register active trip");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /* ───────── Live GPS tracking ───────── */
-  const startLiveTracking = (tripId, routePoints, totalDist, totalDur) => {
-    if (!navigator.geolocation) return;
-
-    gpsWatchRef.current = navigator.geolocation.watchPosition(
-      (pos) => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        setUserLocation([lat, lng]);
-
-        // socket.emit("send-location", {
-        //   tripId,
-        //   userId: user?._id,
-        //   userName: user?.name,
-        //   location: { lat, lng },
-        //   timestamp: new Date(),
-        // });
-
-        // Find closest point on route
-        let minDist = Infinity;
-        let closestIdx = 0;
-        routePoints.forEach(([rlng, rlat], idx) => {
-          const d = getDistance(lat, lng, rlat, rlng);
-          if (d < minDist) { minDist = d; closestIdx = idx; }
-        });
-
-        if (routeDeviation && minDist > deviationThreshold) {
-          setIsDeviated(true);
-          setDeviationMeters(Math.round(minDist));
-        } else {
-          setIsDeviated(false);
-        }
-
-        // Remaining distance
-        let remaining = 0;
-        for (let i = closestIdx; i < routePoints.length - 1; i++) {
-          const [lng1, lat1] = routePoints[i];
-          const [lng2, lat2] = routePoints[i + 1];
-          remaining += getDistance(lat1, lng1, lat2, lng2);
-        }
-
-        const ratio = totalDist > 0 ? remaining / totalDist : 0;
-        setDistanceRemaining((remaining / 1000).toFixed(1));
-        setTimeRemaining(Math.round((totalDur * ratio) / 60));
-
-        if (getDistance(lat, lng, destCoords.lat, destCoords.lng) < 100) {
-          setNearDestination(true);
-        }
-      },
-      (err) => console.error("Watch Position error:", err),
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
-    );
-  };
-
-  /* ───────── Check-in timer ───────── */
-  const startCheckInTimer = () => {
-    const total = checkInterval * 60;
-    setSecondsRemaining(total);
-    if (checkInTimerRef.current) clearInterval(checkInTimerRef.current);
-    // below function runs every second.
-    checkInTimerRef.current = setInterval(() => {
-      setSecondsRemaining((prev) => {
-        if (prev <= 16) setShowCheckInModal(true);
-        if (prev <= 1) { clearInterval(checkInTimerRef.current); return 0; }
-        return prev - 1;
-      });
-    }, 1000);
-  };
-
-  const handleConfirmSafe = () => {
-    setShowCheckInModal(false);
-    startCheckInTimer();
-    // socket.emit("safety-check-response", {
-    //   userId: user?._id,
-    //   userName: user?.name,
-    //   status: "confirmed_safe",
-    //   timestamp: new Date(),
-    // });
-  };
-
-  /* ───────── Complete / abort trip ───────── */
-  const handleCompleteTrip = async () => {
-    if (checkInTimerRef.current) clearInterval(checkInTimerRef.current);
-    if (gpsWatchRef.current) navigator.geolocation.clearWatch(gpsWatchRef.current);
-    try {
-      const token = localStorage.getItem("token");
-      await axios.put(
-        `http://localhost:5000/api/trips/${activeTripId}/complete`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-    //   socket.emit("end-trip", {
-    //     tripId: activeTripId,
-    //     userId: user?._id,
-    //     userName: user?.name,
-    //     status: "completed",
-    //     timestamp: new Date(),
-    //   });
-    } catch (err) {
-      console.error("Complete Trip Error:", err);
-    } finally {
-      setTripState("planning");
-      setBestRoute(null);
-      setRoutes([]);
-      setUserLocation(null);
-      setNearDestination(false);
-    }
-  };
-
-
-  // here we are not updating backend state to cancelled as of now.
-  const handleAbortTrip = () => {
-    if (!window.confirm("End tracking? Your guardians will be notified.")) return;
-    if (checkInTimerRef.current) clearInterval(checkInTimerRef.current);
-    if (gpsWatchRef.current) navigator.geolocation.clearWatch(gpsWatchRef.current);
-    // socket.emit("end-trip", {
-    //   tripId: activeTripId,
-    //   userId: user?._id,
-    //   userName: user?.name,
-    //   status: "cancelled",
-    //   timestamp: new Date(),
-    // });
-    setTripState("planning");
-    setBestRoute(null);
-    setRoutes([]);
-    setUserLocation(null);
-    setNearDestination(false);
-  };
-
-  /* ───────── SOS ───────── */
-  const handleTriggerSOS = async () => {
-    if (recordAudio) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); //Request microphone permission
-        const mr = new MediaRecorder(stream); 
-        mediaRecorderRef.current = mr;
-        mr.ondataavailable = (e) => {
-          if (e.data.size > 0) chunksRef.current.push(e.data);
-        };
-        mr.start(); //microphone starts recording.
-        setSosActive(true);
-      } catch (err) {
-        console.error("Microphone error:", err.message);
-      }
-    }
-
-    const currentGPS = userLocation
-      ? { lat: userLocation[0], lng: userLocation[1] }
-      : { lat: startCoords.lat, lng: startCoords.lng };
-
-      // here we are checking INTERNET available or NOT??
-    if (!navigator.onLine) { // OFFLINE
-      setTimeout(async () => {
-        if (mediaRecorderRef.current?.state === "recording") {
-          mediaRecorderRef.current.stop();
-          mediaRecorderRef.current.onstop = async () => {
-            const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-            await queueOfflineAlert(currentGPS, activeTripId, blob);
-            chunksRef.current = [];
-            setSosActive(false);
-            alert("Offline: SOS queued. Will sync when online.");
-          };
-        } else {
-          await queueOfflineAlert(currentGPS, activeTripId, null);
-          alert("Offline: SOS queued.");
-        }
-      }, 8000);
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem("token");
-      const res = await axios.post(
-        "http://localhost:5000/api/sos/trigger",
-        { location: currentGPS, tripId: activeTripId },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      const alertItem = res.data.alert;
-      setSosAlertId(alertItem._id); 
-    //   socket.emit("sos-alert", {
-    //     tripId: activeTripId,
-    //     userId: user?._id,
-    //     userName: user?.name,
-    //     location: currentGPS,
-    //     alertId: alertItem._id,
-    //   });
-      if (recordAudio) setTimeout(() => stopAudioAndLink(alertItem._id), 10000); //ONLINE
-    } catch (err) {
-      console.error("SOS trigger error:", err);
-      alert("Failed to send SOS");
-    }
-  };
-
-  const stopAudioAndLink = async (alertId) => {
-    if (mediaRecorderRef.current?.state === "recording") {
-      mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.onstop = async () => {
-        try {
-          const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-          const fd = new FormData();
-          fd.append("audio", blob);
-          const uploadRes = await axios.post(
-            "http://localhost:5000/api/recordings/upload",
-            fd
-          );
-          const token = localStorage.getItem("token");
-          await axios.put(
-            `http://localhost:5000/api/alerts/${alertId}/audio`,
-            { audioUrl: uploadRes.data.audioUrl },
-            { headers: { Authorization: `Bearer ${token}` } }
-          );
-          chunksRef.current = [];
-          setSosActive(false);
-        } catch (err) {
-          console.error("Audio upload error:", err);
-        }
-      };
-    }
-  };
-
-  // when we reach near destination pop up will ask did u arrive safely (from theer yes-true & no->false goes in safe) 
   const handleConfirmArrival = (safe) => {
     setNearDestination(false);
-    if (safe) handleCompleteTrip();
-    else handleTriggerSOS();
+    if (safe) completeTrip();
+    else sosRef.current?.startSOS();
   };
 
   const formatTime = (seconds) => {
@@ -538,26 +228,35 @@ export default function TripPage() {
       <SafetyCheckModal
         isOpen={showCheckInModal}
         onConfirmSafe={handleConfirmSafe}
-        onTriggerSOS={() => { setShowCheckInModal(false); handleTriggerSOS(); }}
+        onTriggerSOS={() => {
+          setShowCheckInModal(false);
+          sosRef.current?.startSOS();
+        }}
         countdownSeconds={15}
       />
 
       {/* ── Active trip status banner ── */}
       {tripState === "active" && (
-        <div className={`px-6 py-3.5 flex items-center justify-between font-semibold text-sm ${
-          isDeviated
-            ? "bg-red-50 text-red-700 border-b border-red-100"
-            : "bg-green-50 text-green-700 border-b border-green-100"
-        }`}>
+        <div
+          className={`px-6 py-3.5 flex items-center justify-between font-semibold text-sm ${
+            isDeviated
+              ? "bg-red-50 text-red-700 border-b border-red-100"
+              : "bg-green-50 text-green-700 border-b border-green-100"
+          }`}
+        >
           <span className="flex items-center gap-2">
-            <span className={`h-2 w-2 rounded-full animate-pulse ${isDeviated ? "bg-red-500" : "bg-green-500"}`} />
+            <span
+              className={`h-2 w-2 rounded-full animate-pulse ${
+                isDeviated ? "bg-red-500" : "bg-green-500"
+              }`}
+            />
             {isDeviated
               ? `⚠️ Route deviation — ${deviationMeters}m off path`
               : "Trip in progress. Stay safe!"}
           </span>
           <button
-            onClick={handleAbortTrip}
-            className="text-xs bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg font-semibold transition"
+            onClick={abortTrip}
+            className="text-xs bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer"
           >
             End Trip
           </button>
@@ -571,12 +270,16 @@ export default function TripPage() {
             🎯 You're near your destination — arrived safely?
           </span>
           <div className="flex gap-2">
-            <button onClick={() => handleConfirmArrival(true)}
-              className="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg font-bold transition">
+            <button
+              onClick={() => handleConfirmArrival(true)}
+              className="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg font-bold transition cursor-pointer"
+            >
               Yes, I'm Safe
             </button>
-            <button onClick={() => handleConfirmArrival(false)}
-              className="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg font-bold transition">
+            <button
+              onClick={() => handleConfirmArrival(false)}
+              className="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg font-bold transition cursor-pointer"
+            >
               No, SOS
             </button>
           </div>
@@ -584,7 +287,6 @@ export default function TripPage() {
       )}
 
       <main className="max-w-7xl mx-auto px-6 py-8">
-
         {/* ── Hero (planning only) ── */}
         {tripState === "planning" && (
           <motion.section
@@ -613,8 +315,7 @@ export default function TripPage() {
         )}
 
         <div className="flex flex-col md:flex-row gap-6">
-
-          {/* ── Map — receives separated props for clean rendering ── */}
+          {/* ── Map ── */}
           <div className="flex-1 bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-sm relative min-h-[500px]">
             <LiveMap
               routes={routes}
@@ -629,8 +330,7 @@ export default function TripPage() {
           <div className="w-full md:w-96 flex flex-col gap-6">
             {tripState === "planning" ? (
               <div className="bg-white border border-slate-100 p-6 rounded-2xl space-y-5 shadow-sm">
-
-                {/* ── Start input with Geoapify autocomplete ── */}
+                {/* ── Start input ── */}
                 <div className="relative">
                   <label className="block mb-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                     Starting Point
@@ -645,7 +345,7 @@ export default function TripPage() {
                     />
                     <button
                       onClick={useCurrentLocation}
-                      className="bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-2 rounded-xl text-base transition"
+                      className="bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-2 rounded-xl text-base transition cursor-pointer"
                       title="Use my location"
                     >
                       📍
@@ -671,7 +371,7 @@ export default function TripPage() {
                   )}
                 </div>
 
-                {/* ── Destination input with Geoapify autocomplete ── */}
+                {/* ── Destination input ── */}
                 <div className="relative">
                   <label className="block mb-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                     Destination
@@ -717,7 +417,7 @@ export default function TripPage() {
                       <button
                         key={m.id}
                         onClick={() => setTravelMode(m.id)}
-                        className={`flex flex-col items-center justify-center py-2.5 rounded-xl border text-xs font-medium transition ${
+                        className={`flex flex-col items-center justify-center py-2.5 rounded-xl border text-xs font-medium transition cursor-pointer ${
                           travelMode === m.id
                             ? "bg-red-50 border-red-300 text-red-600"
                             : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
@@ -733,20 +433,19 @@ export default function TripPage() {
                 <button
                   onClick={fetchSafeRoutes}
                   disabled={loading}
-                  className="w-full bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition text-sm shadow-[0_4px_20px_rgba(220,38,38,0.25)]"
+                  className="w-full bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition text-sm shadow-[0_4px_20px_rgba(220,38,38,0.25)] cursor-pointer"
                 >
                   {loading ? (
                     <span className="flex items-center justify-center gap-2">
                       <span className="h-3.5 w-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
                       Scoring routes...
                     </span>
-                  ) : "📍 Find Safest Route"}
+                  ) : (
+                    "📍 Find Safest Route"
+                  )}
                 </button>
 
-                {/* ── Route options ──
-                    Backend returns up to 2 routes sorted safest-first.
-                    Clicking a route card immediately swaps bestRoute →
-                    LiveMap redraws the bold red polyline to that route. ── */}
+                {/* ── Route options ── */}
                 {routes.length > 0 && (
                   <div className="space-y-2">
                     <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
@@ -756,7 +455,7 @@ export default function TripPage() {
                       <button
                         key={idx}
                         onClick={() => handleSelectRoute(idx)}
-                        className={`w-full text-left p-3.5 rounded-xl border transition-all ${
+                        className={`w-full text-left p-3.5 rounded-xl border transition-all cursor-pointer ${
                           selectedRouteIdx === idx
                             ? "border-red-300 bg-red-50 shadow-sm"
                             : "border-slate-100 bg-slate-50 hover:bg-slate-100"
@@ -773,13 +472,21 @@ export default function TripPage() {
                               {idx > 0 && `Route ${idx + 1}`}
                             </span>
                           </div>
-                          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${scoreColor(r.score)}`}>
+                          <span
+                            className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${scoreColor(
+                              r.score
+                            )}`}
+                          >
                             {r.score}% · {scoreLabel(r.score)}
                           </span>
                         </div>
                         <div className="flex gap-3 text-[11px] text-slate-400">
-                          <span>📏 {(r.summary?.distance / 1000).toFixed(1)} km</span>
-                          <span>⏱ {Math.round(r.summary?.duration / 60)} min</span>
+                          <span>
+                            📏 {(r.summary?.distance / 1000).toFixed(1)} km
+                          </span>
+                          <span>
+                            ⏱ {Math.round(r.summary?.duration / 60)} min
+                          </span>
                           {r.breakdown?.policeStations > 0 && (
                             <span>🚓 {r.breakdown.policeStations}</span>
                           )}
@@ -799,46 +506,70 @@ export default function TripPage() {
                       <span className="text-xs font-semibold text-slate-600">
                         Selected Route Safety
                       </span>
-                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${scoreColor(bestRoute.score)}`}>
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${scoreColor(
+                          bestRoute.score
+                        )}`}
+                      >
                         {bestRoute.score}%
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-xs text-slate-500 border-t border-slate-200 pt-3">
-                      <div>📏 {(bestRoute.summary?.distance / 1000).toFixed(1)} km</div>
-                      <div>⏱️ {Math.round(bestRoute.summary?.duration / 60)} mins</div>
+                      <div>
+                        📏 {(bestRoute.summary?.distance / 1000).toFixed(1)} km
+                      </div>
+                      <div>
+                        ⏱️ {Math.round(bestRoute.summary?.duration / 60)} mins
+                      </div>
                       {bestRoute.breakdown && (
                         <>
-                          <div>🚓 {bestRoute.breakdown.policeStations ?? 0} police</div>
-                          <div>🏥 {bestRoute.breakdown.hospitals ?? 0} hospitals</div>
+                          <div>
+                            🚓 {bestRoute.breakdown.policeStations ?? 0} police
+                          </div>
+                          <div>
+                            🏥 {bestRoute.breakdown.hospitals ?? 0} hospitals
+                          </div>
                           {bestRoute.breakdown.bars > 0 && (
-                            <div className="text-red-500">🍺 {bestRoute.breakdown.bars} bars nearby</div>
+                            <div className="text-red-500">
+                              🍺 {bestRoute.breakdown.bars} bars nearby
+                            </div>
                           )}
                         </>
                       )}
                     </div>
                     <button
-                      onClick={handleStartTrip}
+                      onClick={startTrip}
                       disabled={loading}
-                      className="w-full bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition text-sm shadow-[0_4px_20px_rgba(22,163,74,0.2)]"
+                      className="w-full bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition text-sm shadow-[0_4px_20px_rgba(22,163,74,0.2)] cursor-pointer"
                     >
                       🚀 Start Trip
                     </button>
                   </div>
                 )}
 
-                {/* ── Safety settings (collapsible) ── */}
+                {/* ── Safety settings ── */}
                 <div className="border-t border-slate-100 pt-4">
                   <button
                     onClick={() => setShowSettings((p) => !p)}
-                    className="w-full flex justify-between items-center text-[11px] font-semibold uppercase tracking-wider text-slate-500"
+                    className="w-full flex justify-between items-center text-[11px] font-semibold uppercase tracking-wider text-slate-500 cursor-pointer"
                   >
                     Safety Settings
-                    <span className="text-slate-400">{showSettings ? "▲" : "▼"}</span>
+                    <span className="text-slate-400">
+                      {showSettings ? "▲" : "▼"}
+                    </span>
                   </button>
                   {showSettings && (
                     <div className="space-y-4 mt-4">
-                      <ToggleRow label="Share live location with contacts" checked={shareLocation} onChange={setShareLocation} />
-                      <ToggleRow label="Alert contacts on route deviation" checked={routeDeviation} onChange={setRouteDeviation} />
+                      <ToggleRow
+                        label="Share live location with contacts"
+                        checked={shareLocation}
+                        onChange={setShareLocation}
+                      />
+                      <ToggleRow
+                        label="Alert contacts on route deviation"
+                        checked={routeDeviation}
+                        onChange={setRouteDeviation}
+                      />
                       {routeDeviation && (
                         <div className="space-y-1">
                           <div className="flex justify-between text-[10px] text-slate-400">
@@ -846,20 +577,31 @@ export default function TripPage() {
                             <span>{deviationThreshold}m</span>
                           </div>
                           <input
-                            type="range" min={100} max={500} step={50}
+                            type="range"
+                            min={100}
+                            max={500}
+                            step={50}
                             value={deviationThreshold}
-                            onChange={(e) => setDeviationThreshold(Number(e.target.value))}
-                            className="w-full accent-red-500"
+                            onChange={(e) =>
+                              setDeviationThreshold(Number(e.target.value))
+                            }
+                            className="w-full accent-red-500 cursor-pointer"
                           />
                         </div>
                       )}
-                      <ToggleRow label="Periodic safety check-ins" checked={periodicCheck} onChange={setPeriodicCheck} />
+                      <ToggleRow
+                        label="Periodic safety check-ins"
+                        checked={periodicCheck}
+                        onChange={setPeriodicCheck}
+                      />
                       {periodicCheck && (
                         <div className="flex items-center justify-between text-xs text-slate-500">
                           <span>Check-in interval</span>
                           <select
                             value={checkInterval}
-                            onChange={(e) => setCheckInterval(Number(e.target.value))}
+                            onChange={(e) =>
+                              setCheckInterval(Number(e.target.value))
+                            }
                             className="bg-slate-50 border border-slate-200 rounded-lg p-1.5 text-[11px] text-slate-700"
                           >
                             <option value={1}>1 Min (Demo)</option>
@@ -869,12 +611,15 @@ export default function TripPage() {
                           </select>
                         </div>
                       )}
-                      <ToggleRow label="Auto-record emergency audio" checked={recordAudio} onChange={setRecordAudio} />
+                      <ToggleRow
+                        label="Auto-record emergency audio"
+                        checked={recordAudio}
+                        onChange={setRecordAudio}
+                      />
                     </div>
                   )}
                 </div>
               </div>
-
             ) : (
               /* ── ACTIVE TRIP MONITOR ── */
               <div className="bg-white border border-slate-100 p-6 rounded-2xl space-y-5 shadow-sm">
@@ -893,16 +638,28 @@ export default function TripPage() {
                     <h3 className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
                       Destination
                     </h3>
-                    <p className="text-sm font-semibold text-slate-800 line-clamp-2">{destQuery}</p>
+                    <p className="text-sm font-semibold text-slate-800 line-clamp-2">
+                      {destQuery}
+                    </p>
                   </div>
                   <div className="grid grid-cols-2 gap-4 border-t border-slate-200 pt-3">
                     <div>
-                      <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">Distance Left</p>
-                      <p className="text-2xl font-extrabold text-slate-900">{distanceRemaining} <span className="text-sm font-medium">km</span></p>
+                      <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">
+                        Distance Left
+                      </p>
+                      <p className="text-2xl font-extrabold text-slate-900">
+                        {distanceRemaining}{" "}
+                        <span className="text-sm font-medium">km</span>
+                      </p>
                     </div>
                     <div>
-                      <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">ETA</p>
-                      <p className="text-2xl font-extrabold text-slate-900">{timeRemaining} <span className="text-sm font-medium">min</span></p>
+                      <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">
+                        ETA
+                      </p>
+                      <p className="text-2xl font-extrabold text-slate-900">
+                        {timeRemaining}{" "}
+                        <span className="text-sm font-medium">min</span>
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -911,17 +668,23 @@ export default function TripPage() {
                   <div className="bg-slate-50 border border-slate-100 p-4 rounded-xl space-y-2">
                     <div className="flex justify-between items-center text-xs text-slate-500">
                       <span>Next check-in</span>
-                      <span className="font-bold text-slate-900 font-mono">{formatTime(secondsRemaining)}</span>
+                      <span className="font-bold text-slate-900 font-mono">
+                        {formatTime(secondsRemaining)}
+                      </span>
                     </div>
                     <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
                       <div
                         className="bg-green-500 h-full transition-all duration-1000 ease-linear"
-                        style={{ width: `${(secondsRemaining / (checkInterval * 60)) * 100}%` }}
+                        style={{
+                          width: `${
+                            (secondsRemaining / (checkInterval * 60)) * 100
+                          }%`,
+                        }}
                       />
                     </div>
                     <button
                       onClick={handleConfirmSafe}
-                      className="w-full bg-green-50 hover:bg-green-100 border border-green-200 text-green-700 font-semibold py-2 rounded-xl transition text-xs"
+                      className="w-full bg-green-50 hover:bg-green-100 border border-green-200 text-green-700 font-semibold py-2 rounded-xl transition text-xs cursor-pointer"
                     >
                       ✓ Confirm I'm Safe
                     </button>
@@ -929,7 +692,9 @@ export default function TripPage() {
                 )}
 
                 <div className="bg-slate-50 border border-slate-100 p-4 rounded-xl space-y-2">
-                  <h4 className="font-semibold text-slate-700 text-xs">Guardians Notified</h4>
+                  <h4 className="font-semibold text-slate-700 text-xs">
+                    Guardians Notified
+                  </h4>
                   {user?.emergencyContacts?.length > 0 ? (
                     <ul className="space-y-1.5 text-xs text-slate-500">
                       {user.emergencyContacts.map((num, i) => (
@@ -940,27 +705,30 @@ export default function TripPage() {
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-amber-600 text-xs">No guardians set. Update your profile.</p>
-                  )}
-                </div>
-
-                <div className="bg-red-50 border border-red-100 p-5 rounded-xl space-y-3">
-                  <button
-                    onClick={handleTriggerSOS}
-                    className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-4 rounded-xl transition text-base shadow-[0_4px_20px_rgba(220,38,38,0.3)] active:scale-95"
-                  >
-                    🚨 Trigger SOS
-                  </button>
-                  {sosActive && (
-                    <p className="text-center text-xs text-red-600 animate-pulse font-semibold">
-                      🎙️ Recording emergency audio...
+                    <p className="text-amber-600 text-xs">
+                      No guardians set. Update your profile.
                     </p>
                   )}
                 </div>
 
+                <div className="bg-red-50 border border-red-100 p-5 rounded-xl space-y-3">
+                  <SOSButton
+                    tripId={activeTripId}
+                    currentLocation={
+                      userLocation
+                        ? { lat: userLocation[0], lng: userLocation[1] }
+                        : startCoords.lat
+                        ? { lat: startCoords.lat, lng: startCoords.lng }
+                        : null
+                    }
+                    recordAudio={recordAudio}
+                    ref={sosRef}
+                  />
+                </div>
+
                 <button
-                  onClick={handleCompleteTrip}
-                  className="w-full bg-slate-900 hover:bg-black text-white py-3 rounded-xl transition text-sm font-semibold"
+                  onClick={completeTrip}
+                  className="w-full bg-slate-900 hover:bg-black text-white py-3 rounded-xl transition text-sm font-semibold cursor-pointer"
                 >
                   🏁 Finish Trip Successfully
                 </button>
@@ -979,9 +747,15 @@ function ToggleRow({ label, checked, onChange }) {
       <span className="text-xs text-slate-600">{label}</span>
       <button
         onClick={() => onChange(!checked)}
-        className={`relative w-10 h-6 rounded-full transition-colors ${checked ? "bg-red-600" : "bg-slate-200"}`}
+        className={`relative w-10 h-6 rounded-full transition-colors cursor-pointer ${
+          checked ? "bg-red-600" : "bg-slate-200"
+        }`}
       >
-        <span className={`absolute top-1 h-4 w-4 bg-white rounded-full shadow transition-all ${checked ? "left-5" : "left-1"}`} />
+        <span
+          className={`absolute top-1 h-4 w-4 bg-white rounded-full shadow transition-all ${
+            checked ? "left-5" : "left-1"
+          }`}
+        />
       </button>
     </div>
   );
