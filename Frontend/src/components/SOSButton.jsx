@@ -1,4 +1,4 @@
-import { useRef, useState, forwardRef, useImperativeHandle } from "react";
+import { useRef, useState, useEffect, forwardRef, useImperativeHandle } from "react";
 import axios from "axios";
 import api from "../utils/api";
 import { queueOfflineAlert } from "../utils/offlineQueue";
@@ -23,6 +23,45 @@ const SOSButton = forwardRef(function SOSButton(
   const streamRef = useRef(null);
   // Ref tracking to circumvent asynchronous state closure lag
   const currentAlertIdRef = useRef(null);
+
+  /* =========================
+      RESTORE ACTIVE SOS STATE ON MOUNT / NAVIGATION
+  ========================= */
+  useEffect(() => {
+    const restoreActiveSOS = async () => {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+
+      try {
+        const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
+        const currentUserId = storedUser._id || storedUser.id;
+        if (!currentUserId) return;
+
+        const res = await api.get("/alerts");
+        const activeAlert = (res.data || []).find(
+          (a) =>
+            (a.userId === currentUserId || a.userId === currentUserId.toString()) &&
+            a.status === "active"
+        );
+
+        if (activeAlert) {
+          console.log("🚨 Active SOS alert restored on mount:", activeAlert._id);
+          currentAlertIdRef.current = activeAlert._id;
+          localStorage.setItem("sahyatri_active_sos_alert_id", activeAlert._id);
+          setSOSActive(true);
+          onSOSStateChange?.(true);
+        } else {
+          localStorage.removeItem("sahyatri_active_sos_alert_id");
+          setSOSActive(false);
+          onSOSStateChange?.(false);
+        }
+      } catch (err) {
+        console.error("Failed to restore active SOS state:", err);
+      }
+    };
+
+    restoreActiveSOS();
+  }, []);
 
   /* =========================
       LOCATION HELPER
@@ -252,6 +291,7 @@ const SOSButton = forwardRef(function SOSButton(
 
       // Lock current alert ID into the reference container immediately
       currentAlertIdRef.current = res.data.alert._id;
+      localStorage.setItem("sahyatri_active_sos_alert_id", res.data.alert._id);
       setSOSActive(true);
       onSOSStateChange?.(true);
       console.log("🚨 SOS CREATED:", res.data);
@@ -399,7 +439,10 @@ const SOSButton = forwardRef(function SOSButton(
         } catch (rErr) {}
       }
 
+      localStorage.removeItem("sahyatri_active_sos_alert_id");
       currentAlertIdRef.current = null;
+      setSOSActive(false);
+      onSOSStateChange?.(false);
       alert("✅ SOS STOPPED");
     } catch (err) {
       console.error(err);
