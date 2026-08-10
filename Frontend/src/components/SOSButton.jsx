@@ -383,6 +383,22 @@ const SOSButton = forwardRef(function SOSButton(
         }
       }
 
+      // Resolve active alert on backend server
+      if (activeAlertId) {
+        try {
+          await api.put(`/alerts/${activeAlertId}/resolve`);
+          console.log(`✅ Alert ${activeAlertId} marked resolved on server.`);
+          window.dispatchEvent(new CustomEvent("sos-created"));
+        } catch (rErr) {
+          console.error("Failed to resolve alert on server:", rErr);
+        }
+      } else {
+        try {
+          await api.put("/alerts/resolve-all");
+          window.dispatchEvent(new CustomEvent("sos-created"));
+        } catch (rErr) {}
+      }
+
       currentAlertIdRef.current = null;
       alert("✅ SOS STOPPED");
     } catch (err) {

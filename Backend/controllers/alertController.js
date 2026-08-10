@@ -55,3 +55,48 @@ export const updateAlertAudio = async (req, res) => {
     });
   }
 };
+
+// RESOLVE SINGLE ALERT
+export const resolveAlert = async (req, res) => {
+  try {
+    const { alertId } = req.params;
+    const userId = req.user?.id || req.user?._id;
+
+    const updatedAlert = await Alert.findOneAndUpdate(
+      { _id: alertId, userId: userId.toString() },
+      { status: "resolved", resolvedAt: new Date() },
+      { new: true }
+    );
+
+    if (!updatedAlert) {
+      return res.status(404).json({ message: "Alert not found or unauthorized" });
+    }
+
+    res.json({
+      success: true,
+      message: "Alert resolved successfully",
+      alert: updatedAlert,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// RESOLVE ALL ACTIVE ALERTS FOR USER (called on trip complete/abort or clear all)
+export const resolveAllUserAlerts = async (req, res) => {
+  try {
+    const userId = req.user?.id || req.user?._id;
+
+    await Alert.updateMany(
+      { userId: userId.toString(), status: "active" },
+      { status: "resolved", resolvedAt: new Date() }
+    );
+
+    res.json({
+      success: true,
+      message: "All active SOS alerts resolved for user",
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};

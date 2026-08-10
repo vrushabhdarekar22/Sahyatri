@@ -258,6 +258,12 @@ export const ActiveTripProvider = ({ children }) => {
         stopLiveTracking();
         localStorage.removeItem("sahyatri_active_trip_id");
 
+        // Automatically resolve any active SOS alerts for this user upon safe trip completion
+        try {
+          await api.put("/alerts/resolve-all");
+          window.dispatchEvent(new CustomEvent("sos-created"));
+        } catch (e) {}
+
         setTripState("planning");
         setActiveTrip(null);
         setActiveTripId(null);
@@ -299,6 +305,12 @@ export const ActiveTripProvider = ({ children }) => {
       if (targetTripId) {
         await api.put(`/trips/${targetTripId}/complete`, {});
       }
+
+      // Automatically resolve any active SOS alerts for this user upon trip abort
+      try {
+        await api.put("/alerts/resolve-all");
+        window.dispatchEvent(new CustomEvent("sos-created"));
+      } catch (e) {}
 
       stopCheckInTimer();
       stopLiveTracking();

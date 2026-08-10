@@ -76,13 +76,19 @@ export default function GuardianDashboard() {
       // Extract unique travellers list
       const monitoredList = relationships.map((rel) => {
         const tr = rel.traveller || {};
-        const travellerAlert = allAlerts.find(
+        // Find ACTIVE (unresolved) emergency alert for traveller
+        const travellerActiveAlert = allAlerts.find(
+          (a) => (a.userId === tr._id || a.name === tr.name) && (a.status === "active" || a.status === undefined)
+        );
+        // Find latest overall alert for location backup
+        const latestAlert = allAlerts.find(
           (a) => a.userId === tr._id || a.name === tr.name
         );
 
-        const isSOS = !!travellerAlert;
-        const loc = travellerAlert?.location?.lat
-          ? [travellerAlert.location.lat, travellerAlert.location.lng]
+        const isSOS = !!travellerActiveAlert;
+        const alertForLoc = travellerActiveAlert || latestAlert;
+        const loc = alertForLoc?.location?.lat
+          ? [alertForLoc.location.lat, alertForLoc.location.lng]
           : [18.5204, 73.8567];
 
         return {
@@ -96,10 +102,10 @@ export default function GuardianDashboard() {
           eta: null,
           remainingDistance: null,
           lastLocation: loc,
-          locationAddress: travellerAlert?.location?.lat
-            ? `${travellerAlert.location.lat.toFixed(4)}, ${travellerAlert.location.lng.toFixed(4)}`
+          locationAddress: alertForLoc?.location?.lat
+            ? `${alertForLoc.location.lat.toFixed(4)}, ${alertForLoc.location.lng.toFixed(4)}`
             : "Location available",
-          lastUpdated: travellerAlert ? new Date(travellerAlert.createdAt).toLocaleTimeString() : "Just now",
+          lastUpdated: alertForLoc ? new Date(alertForLoc.createdAt).toLocaleTimeString() : "Just now",
           path: isSOS ? [loc] : [],
         };
       });
@@ -112,15 +118,22 @@ export default function GuardianDashboard() {
       setMonitoredUsers(monitoredList);
 
       // Create activity feed
-      const activitiesList = relevantAlerts.map((alert) => ({
-        id: alert._id || Math.random(),
-        type: "sos-triggered",
-        title: "SOS Alert",
-        description: `🚨 Emergency alert triggered by ${alert.name || "Traveller"}`,
-        timestamp: new Date(alert.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        badgeColor: "bg-red-100 text-red-700 border-red-200 font-bold",
-        icon: "🚨",
-      }));
+      const activitiesList = (relevantAlerts.length > 0 ? relevantAlerts : allAlerts).map((alert) => {
+        const isResolved = alert.status === "resolved";
+        return {
+          id: alert._id || Math.random(),
+          type: isResolved ? "sos-resolved" : "sos-triggered",
+          title: isResolved ? "SOS Alert Resolved" : "SOS Alert",
+          description: isResolved
+            ? `✅ Emergency alert resolved for ${alert.name || "Traveller"}`
+            : `🚨 Emergency alert triggered by ${alert.name || "Traveller"}`,
+          timestamp: new Date(alert.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          badgeColor: isResolved
+            ? "bg-emerald-100 text-emerald-800 border-emerald-300 font-medium"
+            : "bg-red-100 text-red-700 border-red-200 font-bold",
+          icon: isResolved ? "✅" : "🚨",
+        };
+      });
 
       setActivities(activitiesList);
     } catch (err) {
@@ -130,6 +143,9 @@ export default function GuardianDashboard() {
 
   useEffect(() => {
     fetchDashboardData();
+    // Poll every 10 seconds for real-time status updates on Guardian Dashboard
+    const interval = setInterval(fetchDashboardData, 10000);
+    return () => clearInterval(interval);
   }, []);
 
   // ─── DERIVED COUNTS ──────────────────────────────────────────────
@@ -137,7 +153,7 @@ export default function GuardianDashboard() {
   const activeTripsCount = monitoredUsers.filter(
     (u) => u.status === "Active Trip"
   ).length;
-  const activeSOSAlerts = alerts.length;
+  const activeSOSAlerts = alerts.filter((a) => a.status === "active" || a.status === undefined).length;
 
   // Active Emergency User (if any)
   const sosUser = monitoredUsers.find((u) => u.status === "SOS Active");
