@@ -8,6 +8,21 @@ export const getRoutes = async (req, res) => {
   try {
     const { start, end, mode } = req.body;
 
+    if (!start?.lat || !start?.lng || !end?.lat || !end?.lng) {
+      return res.status(400).json({
+        success: false,
+        message: "Start and destination coordinates are required",
+      });
+    }
+
+    if (!process.env.ORS_API_KEY) {
+      console.error("Missing ORS_API_KEY in environment variables");
+      return res.status(500).json({
+        success: false,
+        message: "OpenRouteService API key is missing on backend server",
+      });
+    }
+
     const routes = await getRoutesFromORS(start, end, mode);
 
     console.log("Routes Found:", routes.length);
@@ -18,11 +33,11 @@ export const getRoutes = async (req, res) => {
       routes,
     });
   } catch (err) {
-    console.log("getRoutes error:", err.message);
+    console.error("getRoutes error:", err.message);
 
     res.status(500).json({
       success: false,
-      message: "Failed to fetch routes",
+      message: err.message || "Failed to fetch routes",
     });
   }
 };
@@ -33,6 +48,21 @@ export const getRoutes = async (req, res) => {
 export const getSafeRoutes = async (req, res) => {
   try {
     const { start, end, mode } = req.body;
+
+    if (!start?.lat || !start?.lng || !end?.lat || !end?.lng) {
+      return res.status(400).json({
+        success: false,
+        message: "Start and destination coordinates are required",
+      });
+    }
+
+    if (!process.env.ORS_API_KEY) {
+      console.error("Missing ORS_API_KEY in environment variables");
+      return res.status(500).json({
+        success: false,
+        message: "OpenRouteService API key is missing on backend server",
+      });
+    }
 
     const routes = await getRoutesFromORS(start, end, mode);
 
@@ -51,10 +81,8 @@ export const getSafeRoutes = async (req, res) => {
           id: route.id ?? index,
           geometry: route.geometry,
           summary: route.summary,
-
           distance: route.distance,
           duration: route.duration,
-
           score: result.totalScore,
           breakdown: result.breakdown,
         };
@@ -72,11 +100,11 @@ export const getSafeRoutes = async (req, res) => {
       allRoutes: scoredRoutes,
     });
   } catch (err) {
-    console.log("Safe Route Error:", err.message);
+    console.error("Safe Route Error:", err.message);
 
     res.status(500).json({
       success: false,
-      message: "Failed to calculate safe routes",
+      message: err.message || "Failed to calculate safe routes",
     });
   }
 };
