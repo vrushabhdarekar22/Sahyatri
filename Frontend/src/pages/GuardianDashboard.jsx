@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import axios from "axios";
+import api from "../utils/api";
 import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "../components/Navbar";
 import {
@@ -64,21 +64,11 @@ export default function GuardianDashboard() {
   // ─── FETCH MONITORED TRAVELLERS & ALERTS ────────────────────────────
   const fetchDashboardData = async () => {
     try {
-      const token = localStorage.getItem("token");
-      if (!token) return;
-
-      const headers = { Authorization: `Bearer ${token}` };
-
       // 1. Fetch travellers for whom current user is a guardian
-      const travellersRes = await axios.get(
-        "http://localhost:5000/api/guardian/monitored-travellers",
-        { headers }
-      );
+      const travellersRes = await api.get("/guardian/monitored-travellers");
 
       // 2. Fetch emergency alerts
-      const alertsRes = await axios.get("http://localhost:5000/api/alerts", {
-        headers,
-      });
+      const alertsRes = await api.get("/alerts");
 
       const allAlerts = Array.isArray(alertsRes.data) ? alertsRes.data : [];
       const relationships = Array.isArray(travellersRes.data) ? travellersRes.data : [];

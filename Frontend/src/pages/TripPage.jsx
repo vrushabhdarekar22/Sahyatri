@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
+import api from "../utils/api";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import useAuth from "../hooks/useAuth";
@@ -171,11 +172,9 @@ export default function TripPage() {
     }
     try {
       setLoading(true);
-      const token = localStorage.getItem("token");
-      const res = await axios.post(
-        "http://localhost:5000/api/routes/safe",
-        { start: startCoords, end: destCoords, mode: travelMode },
-        { headers: { Authorization: `Bearer ${token}` } }
+      const res = await api.post(
+        "/routes/safe",
+        { start: startCoords, end: destCoords, mode: travelMode }
       );
 
       const all = res.data.allRoutes || [];

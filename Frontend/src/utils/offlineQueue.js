@@ -1,4 +1,4 @@
-import axios from "axios";
+import api from "./api";
 
 const QUEUE_KEY = "sahyatri_offline_sos_queue";
 
@@ -56,17 +56,12 @@ export const syncOfflineQueue = async () => {
   for (const item of queue) {
     try {
       // 1. Trigger SOS
-      const sosRes = await axios.post(
-        "http://localhost:5000/api/sos/trigger",
+      const sosRes = await api.post(
+        "/sos/trigger",
         {
           location: item.location,
           tripId: item.tripId,
           isOfflineSync: true,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
         }
       );
 
@@ -81,16 +76,19 @@ export const syncOfflineQueue = async () => {
         const formData = new FormData();
         formData.append("audio", audioBlob);
 
-        const uploadRes = await axios.post(
-          "http://localhost:5000/api/recordings/upload",
-          formData
+        const uploadRes = await api.post(
+          "/recordings/upload",
+          formData,
+          {
+            headers: { "Content-Type": "multipart/form-data" }
+          }
         );
 
         const audioUrl = uploadRes.data.audioUrl;
 
         // Link audio to alert
-        await axios.put(
-          `http://localhost:5000/api/alerts/${alertId}/audio`,
+        await api.put(
+          `/alerts/${alertId}/audio`,
           { audioUrl }
         );
         console.log(`🎤 Synced audio for alert ${alertId}`);

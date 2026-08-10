@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useRef } from "react";
-import axios from "axios";
+import api from "../utils/api";
 import useAuth from "../hooks/useAuth";
 
 const ActiveTripContext = createContext(null);
@@ -160,25 +160,16 @@ export const ActiveTripProvider = ({ children }) => {
     if (!bestRoute) return;
     try {
       setLoading(true);
-      const token = localStorage.getItem("token");
 
-      const res = await axios.post(
-        "http://localhost:5000/api/trips",
-        {
-          start: { lat: startCoords.lat, lng: startCoords.lng, address: startQuery },
-          destination: { lat: destCoords.lat, lng: destCoords.lng, address: destQuery },
-          route: bestRoute,
-          safetyScore: bestRoute.score || 0,
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const res = await api.post("/trips", {
+        start: { lat: startCoords.lat, lng: startCoords.lng, address: startQuery },
+        destination: { lat: destCoords.lat, lng: destCoords.lng, address: destQuery },
+        route: bestRoute,
+        safetyScore: bestRoute.score || 0,
+      });
 
       const trip = res.data;
-      const startRes = await axios.put(
-        `http://localhost:5000/api/trips/${trip._id}/start`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const startRes = await api.put(`/trips/${trip._id}/start`, {});
 
       const activeDoc = startRes.data || trip;
       setActiveTrip(activeDoc);
@@ -209,11 +200,6 @@ export const ActiveTripProvider = ({ children }) => {
   const completeTrip = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem("token");
-      if (!token) {
-        alert("Authentication token missing. Please log in again.");
-        return;
-      }
 
       // Step 1: Resolve targetTripId with multi-layer fallback
       let targetTripId = activeTripId || activeTrip?._id || localStorage.getItem("sahyatri_active_trip_id");
@@ -222,9 +208,7 @@ export const ActiveTripProvider = ({ children }) => {
       if (!targetTripId) {
         console.log("🔍 Active trip ID missing in state. Querying server for active trip...");
         try {
-          const activeRes = await axios.get("http://localhost:5000/api/trips/active", {
-            headers: { Authorization: `Bearer ${token}` },
-          });
+          const activeRes = await api.get("/trips/active");
           if (activeRes.data?._id) {
             targetTripId = activeRes.data._id;
           }
@@ -236,9 +220,7 @@ export const ActiveTripProvider = ({ children }) => {
       // Step 3: Secondary fallback — query GET /api/trips list
       if (!targetTripId) {
         try {
-          const listRes = await axios.get("http://localhost:5000/api/trips", {
-            headers: { Authorization: `Bearer ${token}` },
-          });
+          const listRes = await api.get("/trips");
           const found = (listRes.data || []).find((t) => t.status === "active");
           if (found?._id) {
             targetTripId = found._id;
@@ -267,13 +249,7 @@ export const ActiveTripProvider = ({ children }) => {
 
       console.log(`📡 Sending PUT /api/trips/${targetTripId}/complete to server...`);
 
-      const res = await axios.put(
-        `http://localhost:5000/api/trips/${targetTripId}/complete`,
-        {},
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      const res = await api.put(`/trips/${targetTripId}/complete`, {});
 
       console.log("Server response for trip completion:", res.data);
 
@@ -310,25 +286,18 @@ export const ActiveTripProvider = ({ children }) => {
 
     try {
       setLoading(true);
-      const token = localStorage.getItem("token");
 
       let targetTripId = activeTripId || activeTrip?._id || localStorage.getItem("sahyatri_active_trip_id");
 
-      if (!targetTripId && token) {
+      if (!targetTripId) {
         try {
-          const activeRes = await axios.get("http://localhost:5000/api/trips/active", {
-            headers: { Authorization: `Bearer ${token}` },
-          });
+          const activeRes = await api.get("/trips/active");
           if (activeRes.data?._id) targetTripId = activeRes.data._id;
         } catch (e) {}
       }
 
-      if (targetTripId && token) {
-        await axios.put(
-          `http://localhost:5000/api/trips/${targetTripId}/complete`,
-          {},
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+      if (targetTripId) {
+        await api.put(`/trips/${targetTripId}/complete`, {});
       }
 
       stopCheckInTimer();
@@ -360,14 +329,10 @@ export const ActiveTripProvider = ({ children }) => {
     try {
       let activeTripDoc = null;
       try {
-        const activeRes = await axios.get("http://localhost:5000/api/trips/active", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const activeRes = await api.get("/trips/active");
         activeTripDoc = activeRes.data;
       } catch (e) {
-        const listRes = await axios.get("http://localhost:5000/api/trips", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const listRes = await api.get("/trips");
         activeTripDoc = (listRes.data || []).find((t) => t.status === "active");
       }
 

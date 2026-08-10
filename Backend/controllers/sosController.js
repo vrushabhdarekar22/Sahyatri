@@ -49,7 +49,8 @@ export const triggerSOS = async (req, res) => {
     const mapLink = `https://www.google.com/maps?q=${location.lat},${location.lng}`;
 
     // guardian dash link
-    const dashboardLink = "http://localhost:5173/guardian";
+    const clientBase = (process.env.CLIENT_URL || "http://localhost:5173").replace(/\/$/, "");
+    const dashboardLink = `${clientBase}/guardian`;
 
     /* =========================
        WHATSAPP MESSAGE

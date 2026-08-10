@@ -1,5 +1,6 @@
 import { useRef, useState, forwardRef, useImperativeHandle } from "react";
 import axios from "axios";
+import api from "../utils/api";
 import { queueOfflineAlert } from "../utils/offlineQueue";
 
 const SOSButton = forwardRef(function SOSButton(
@@ -236,20 +237,13 @@ const SOSButton = forwardRef(function SOSButton(
       /* =========================
           TRIGGER SOS API
       ========================= */
-      const token = localStorage.getItem("token");
-
-      const res = await axios.post(
-        "http://localhost:5000/api/sos/trigger",
+      const res = await api.post(
+        "/sos/trigger",
         {
           location: resolvedLocation,
           tripId: tripId || null,
           audioUrl: null,
           isOfflineSync: false,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
         }
       );
 
@@ -342,8 +336,8 @@ const SOSButton = forwardRef(function SOSButton(
             formData.append("audio", blob, `recording.${ext}`);
 
             console.log("🚀 Uploading emergency recording to Cloudinary...");
-            const uploadRes = await axios.post(
-              "http://localhost:5000/api/recordings/upload",
+            const uploadRes = await api.post(
+              "/recordings/upload",
               formData,
               {
                 headers: {
@@ -368,15 +362,9 @@ const SOSButton = forwardRef(function SOSButton(
             }
 
             if (audioUrl && alertIdToBind) {
-              const token = localStorage.getItem("token");
-              await axios.put(
-                `http://localhost:5000/api/alerts/${alertIdToBind}/audio`,
-                { audioUrl },
-                {
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                  },
-                }
+              await api.put(
+                `/alerts/${alertIdToBind}/audio`,
+                { audioUrl }
               );
               console.log("🎤 Audio successfully bound to alert ID:", alertIdToBind);
               window.dispatchEvent(new CustomEvent("sos-created"));

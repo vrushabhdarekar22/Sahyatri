@@ -1,5 +1,5 @@
 import { createContext, useState, useEffect } from "react";
-import axios from "axios";
+import api from "../utils/api";
 
 export const AuthContext = createContext();
 
@@ -19,7 +19,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (email, password) => {
-    const res = await axios.post("http://localhost:5000/api/auth/login", {
+    const res = await api.post("/auth/login", {
       email,
       password,
     });
@@ -36,8 +36,8 @@ export const AuthProvider = ({ children }) => {
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
           try {
-            await axios.post(
-              "http://localhost:5000/api/sos/trigger",
+            await api.post(
+              "/sos/trigger",
               {
                 location: {
                   lat: pos.coords.latitude,
@@ -64,22 +64,16 @@ export const AuthProvider = ({ children }) => {
   };
 
   const register = async (userData) => {
-    const res = await axios.post("http://localhost:5000/api/auth/register", userData);
+    const res = await api.post("/auth/register", userData);
     return res.data;
   };
 
   const updateProfile = async (updates) => {
     try {
-      const res = await axios.put(
-        "http://localhost:5000/api/auth/profile",
-        updates,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+      const res = await api.put(
+        "/auth/profile",
+        updates
       );
-      // If user profile route is not implemented in backend, we will also implement it or handle it in client
       const updatedUser = { ...user, ...updates };
       localStorage.setItem("user", JSON.stringify(updatedUser));
       setUser(updatedUser);

@@ -128,13 +128,13 @@ export const getMyTrips = async (req, res) => {
 
 export const startTrip = async (req, res) => {
   try {
-    const trip = await Trip.findByIdAndUpdate(
-      req.params.id,
+    const trip = await Trip.findOneAndUpdate(
+      { _id: req.params.id, userId: req.user.id },
       { status: "active", startedAt: new Date() },
       { new: true }
     );
 
-    if (!trip) return res.status(404).json({ message: "Trip not found" });
+    if (!trip) return res.status(404).json({ message: "Trip not found or unauthorized" });
 
     res.json(trip);
   } catch (err) {
@@ -149,13 +149,13 @@ export const completeTrip = async (req, res) => {
       return res.status(400).json({ message: "Invalid trip ID provided" });
     }
 
-    const trip = await Trip.findByIdAndUpdate(
-      id,
+    const trip = await Trip.findOneAndUpdate(
+      { _id: id, userId: req.user.id },
       { status: "completed", completedAt: new Date() },
       { new: true }
     );
 
-    if (!trip) return res.status(404).json({ message: "Trip not found" });
+    if (!trip) return res.status(404).json({ message: "Trip not found or unauthorized" });
 
     res.status(200).json({
       success: true,

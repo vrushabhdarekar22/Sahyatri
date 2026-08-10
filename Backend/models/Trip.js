@@ -80,4 +80,6 @@ const tripSchema = new mongoose.Schema(
   }
 );
 
+tripSchema.index({ userId: 1, status: 1 });
+
 export default mongoose.model("Trip", tripSchema);

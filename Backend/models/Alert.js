@@ -27,6 +27,8 @@ const alertSchema = new mongoose.Schema({
 
 });
 
+alertSchema.index({ userId: 1, createdAt: -1 });
+
 export default mongoose.model(
   "Alert",
   alertSchema

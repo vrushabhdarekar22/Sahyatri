@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import axios from "axios";
+import api from "../utils/api";
 import { jsPDF } from "jspdf";
 import useAuth from "../hooks/useAuth";
 import Navbar from "../components/Navbar";
@@ -40,15 +40,7 @@ export default function Dashboard() {
   // Fetch verified SOS log data
   const fetchMySOSHistory = async () => {
     try {
-      const token = localStorage.getItem("token");
-      if (!token) return;
-
-      const res = await axios.get("http://localhost:5000/api/alerts", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
+      const res = await api.get("/alerts");
       const currentUserId = user?._id;
       if (!currentUserId) return;
 
@@ -62,15 +54,7 @@ export default function Dashboard() {
   // Fetch user trips history
   const fetchMyTrips = async () => {
     try {
-      const token = localStorage.getItem("token");
-      if (!token) return;
-
-      const res = await axios.get("http://localhost:5000/api/trips", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
+      const res = await api.get("/trips");
       setTrips(res.data || []);
     } catch (err) {
       console.error("Failed to load trips:", err);
@@ -80,15 +64,7 @@ export default function Dashboard() {
   // Fetch my guardians list from backend API
   const fetchMyGuardians = async () => {
     try {
-      const token = localStorage.getItem("token");
-      if (!token) return;
-
-      const res = await axios.get("http://localhost:5000/api/guardian/my-guardians", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
+      const res = await api.get("/guardian/my-guardians");
       setGuardiansList(res.data || []);
     } catch (err) {
       console.error("Failed to load guardians:", err);
@@ -152,18 +128,12 @@ export default function Dashboard() {
 
     try {
       setModalLoading(true);
-      const token = localStorage.getItem("token");
 
-      const res = await axios.post(
-        "http://localhost:5000/api/guardian/add",
+      const res = await api.post(
+        "/guardian/add",
         {
           email: modalEmail.trim(),
           phone: modalPhone.trim(),
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
         }
       );
 
@@ -186,13 +156,8 @@ export default function Dashboard() {
 
     try {
       setLoading(true);
-      const token = localStorage.getItem("token");
 
-      await axios.delete(`http://localhost:5000/api/guardian/${guardianId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      await api.delete(`/guardian/${guardianId}`);
 
       setSaveMessage("Guardian removed successfully.");
       fetchMyGuardians();
