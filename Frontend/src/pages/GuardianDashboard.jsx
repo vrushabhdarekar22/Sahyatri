@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import api from "../utils/api";
+import useAuth from "../hooks/useAuth";
 import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "../components/Navbar";
 import {
@@ -51,6 +52,7 @@ function RecenterMap({ center, zoom }) {
 }
 
 export default function GuardianDashboard() {
+  const { user } = useAuth();
   // ─── STATE MANAGEMENT ─────────────────────────────────────────────
   const [alerts, setAlerts] = useState([]);
   const [monitoredUsers, setMonitoredUsers] = useState([]);
@@ -64,6 +66,8 @@ export default function GuardianDashboard() {
   // ─── FETCH MONITORED TRAVELLERS & ALERTS ────────────────────────────
   const fetchDashboardData = async () => {
     try {
+      const currentUserId = user?._id || user?.id;
+
       // 1. Fetch travellers for whom current user is a guardian
       const travellersRes = await api.get("/guardian/monitored-travellers");
 
@@ -73,15 +77,20 @@ export default function GuardianDashboard() {
       const allAlerts = Array.isArray(alertsRes.data) ? alertsRes.data : [];
       const relationships = Array.isArray(travellersRes.data) ? travellersRes.data : [];
 
+      // Filter out self-triggered alerts on Guardian Dashboard (only view monitored travellers' alerts)
+      const guardianAlerts = currentUserId
+        ? allAlerts.filter((a) => a.userId !== currentUserId.toString())
+        : allAlerts;
+
       // Extract unique travellers list
       const monitoredList = relationships.map((rel) => {
         const tr = rel.traveller || {};
-        // Find ACTIVE (unresolved) emergency alert for traveller
-        const travellerActiveAlert = allAlerts.find(
-          (a) => (a.userId === tr._id || a.name === tr.name) && (a.status === "active" || a.status === undefined)
+        // Find ACTIVE emergency alert for this traveller
+        const travellerActiveAlert = guardianAlerts.find(
+          (a) => (a.userId === tr._id || a.name === tr.name) && a.status === "active"
         );
         // Find latest overall alert for location backup
-        const latestAlert = allAlerts.find(
+        const latestAlert = guardianAlerts.find(
           (a) => a.userId === tr._id || a.name === tr.name
         );
 
@@ -112,13 +121,13 @@ export default function GuardianDashboard() {
 
       // Filter alerts to show only those belonging to monitored travellers
       const monitoredUserIds = new Set(monitoredList.map((m) => m.id));
-      const relevantAlerts = allAlerts.filter((a) => monitoredUserIds.has(a.userId));
+      const relevantAlerts = guardianAlerts.filter((a) => monitoredUserIds.has(a.userId));
 
-      setAlerts(relevantAlerts.length > 0 ? relevantAlerts : allAlerts);
+      setAlerts(relevantAlerts);
       setMonitoredUsers(monitoredList);
 
       // Create activity feed
-      const activitiesList = (relevantAlerts.length > 0 ? relevantAlerts : allAlerts).map((alert) => {
+      const activitiesList = relevantAlerts.map((alert) => {
         const isResolved = alert.status === "resolved";
         return {
           id: alert._id || Math.random(),
